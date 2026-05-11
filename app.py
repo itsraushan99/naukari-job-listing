@@ -221,14 +221,31 @@ def scrape_naukri_jobs(job_titles, location, experience_min, experience_max, pag
             
             try:
                 driver.get(url)
-                time.sleep(2)
+                print(f"⏳ Waiting for page to load...")
+                time.sleep(3)
+                
+                # Take screenshot for debugging (only on first page)
+                if page == 0:
+                    try:
+                        driver.save_screenshot(f"debug_page_{job_title.replace(' ', '_')}.png")
+                        print(f"📸 Screenshot saved for debugging")
+                    except:
+                        pass
                 
                 wait = WebDriverWait(driver, 15)
+                print(f"🔍 Looking for job cards with CSS selector...")
                 wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "article.jobTuple, div.srp-jobtuple-wrapper")))
                 
                 jobs = driver.find_elements(By.CSS_SELECTOR, "article.jobTuple, div.srp-jobtuple-wrapper")
+                print(f"📊 Found {len(jobs)} job elements on page")
                 
-                for job in jobs:
+                if len(jobs) == 0:
+                    print(f"⚠️ No jobs found with primary selector, trying alternative...")
+                    jobs = driver.find_elements(By.CSS_SELECTOR, "article, div[class*='job'], div[class*='tuple']")
+                    print(f"🔄 Alternative selector found {len(jobs)} elements")
+                
+                jobs_extracted = 0
+                for idx, job in enumerate(jobs):
                     try:
                         title = job.find_element(By.CSS_SELECTOR, "a.title").text.strip()
                         link = job.find_element(By.CSS_SELECTOR, "a.title").get_attribute("href")
@@ -274,22 +291,33 @@ def scrape_naukri_jobs(job_titles, location, experience_min, experience_max, pag
                         # Filter by company type if specified
                         if not company_types or company_type in company_types or company_type == "Not Specified":
                             all_jobs.append(job_data)
+                            jobs_extracted += 1
                             st.session_state.scraping_stats['total'] = len(all_jobs)
-                            
-                            # Real-time table update
-                            temp_df = pd.DataFrame(all_jobs)
-                            table_placeholder.dataframe(temp_df, width='stretch', height=400)
-                            print(f"✅ Scraped {len(all_jobs)} jobs so far...")
+
+                            # Update table every 5 jobs to avoid flooding the websocket
+                            if len(all_jobs) % 5 == 0:
+                                temp_df = pd.DataFrame(all_jobs)
+                                table_placeholder.dataframe(temp_df, width='stretch', height=400)
                         
                     except Exception as e:
+                        print(f"⚠️ Failed to extract job #{idx}: {str(e)}")
                         continue
                 
-                print(f"✅ Page {page + 1} completed - Found {len(jobs)} job listings")
-                progress_placeholder.success(f"✅ Page {page + 1} completed - {len(jobs)} jobs found")
-                time.sleep(1)
+                print(f"✅ Page {page + 1} completed - Extracted {jobs_extracted}/{len(jobs)} jobs | Total so far: {len(all_jobs)}")
+                progress_placeholder.success(f"✅ Page {page + 1} completed - {jobs_extracted} jobs extracted | Total: {len(all_jobs)}")
+                # Always update table at end of each page
+                if all_jobs:
+                    table_placeholder.dataframe(pd.DataFrame(all_jobs), width='stretch', height=400)
+                time.sleep(2)
                 
             except Exception as e:
                 print(f"❌ Error on page {page + 1}: {str(e)}")
+                # Dump page source snippet to diagnose what Naukri returned
+                try:
+                    src = driver.page_source[:2000]
+                    print(f"📄 Page source snippet:\n{src}")
+                except:
+                    pass
                 progress_placeholder.error(f"❌ Error on page {page + 1}: {str(e)}")
                 continue
     
