@@ -157,6 +157,27 @@ def save_to_excel(df, scraping_date):
     df.to_excel(file_path, index=False, engine='openpyxl')
     return file_path
 
+def get_chrome_driver():
+    """Initialize Chrome driver for both local (Windows) and cloud (Linux) environments"""
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--disable-software-rasterizer")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--log-level=3")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+    # On Linux (Streamlit Cloud) use system-installed chromium
+    if os.name != 'nt':
+        chrome_options.binary_location = "/usr/bin/chromium"
+        service = Service("/usr/bin/chromedriver")
+    else:
+        service = Service(ChromeDriverManager().install())
+
+    return webdriver.Chrome(service=service, options=chrome_options)
+
 def scrape_naukri_jobs(job_titles, location, experience_min, experience_max, pages, progress_placeholder, table_placeholder, company_types=[]):
     """Scrape jobs with real-time updates"""
     print(f"\n{'='*60}")
@@ -169,21 +190,13 @@ def scrape_naukri_jobs(job_titles, location, experience_min, experience_max, pag
     print(f"📄 Pages to scrape: {pages}")
     print(f"{'='*60}\n")
     
-    chrome_options = Options()
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--log-level=3")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-    
     try:
         print("🔧 Initializing Chrome WebDriver...")
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        driver = get_chrome_driver()
         print("✅ Chrome WebDriver initialized successfully\n")
     except Exception as e:
         print(f"❌ Failed to initialize Chrome driver: {e}")
-        st.error("❌ Failed to initialize Chrome driver. Please check your installation.")
+        st.error(f"❌ Failed to initialize Chrome driver: {e}")
         return pd.DataFrame()
     
     all_jobs = []
